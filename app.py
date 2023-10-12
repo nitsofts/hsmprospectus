@@ -1,59 +1,63 @@
 from flask import Flask, request, jsonify
+import requests
+from bs4 import BeautifulSoup
+import json
 
 app = Flask(__name__)
 
-@app.route('/add', methods=['GET', 'POST'])
-def add_numbers():
-    if request.method == 'GET':
-        num1 = float(request.args.get('num1', 0))
-        num2 = float(request.args.get('num2', 0))
-    elif request.method == 'POST':
-        data = request.get_json()
-        num1 = float(data.get('num1', 0))
-        num2 = float(data.get('num2', 0))
+def scrape_sebon_data(page_numbers):
+    combined_data = []
 
-    result = num1 + num2
-    response = {'result': result}
+    for page_number in page_numbers:
+        # Define the URL for the given page
+        url = f"https://www.sebon.gov.np/prospectus?page={page_number}"
 
-    return jsonify(response)
+        # Send a GET request to the URL
+        response = requests.get(url)
 
-@app.route('/buy', methods=['GET'])
-def buy():
-    units = float(request.args.get('units', 0))
-    buying_price = float(request.args.get('buying_price', 0))
+        if response.status_code == 200:
+            # Parse the HTML content
+            soup = BeautifulSoup(response.content, 'html.parser')
 
-    share_amount = round(units * buying_price, 2)
-    sebon_fee = round((0.015 / 100) * share_amount, 2)
+            # Find the table containing the prospectus data
+            table = soup.find('table', class_='table')
 
-    if share_amount <= 50000:
-        broker_commission = round(max(0.004 * share_amount, 10), 2)
-    elif 50001 <= share_amount <= 500000:
-        broker_commission = round(0.0037 * share_amount, 2)
-    elif 500001 <= share_amount <= 2000000:
-        broker_commission = round(0.0034 * share_amount, 2)
-    elif 2000001 <= share_amount <= 10000000:
-        broker_commission = round(0.003 * share_amount, 2)
-    else:
-        broker_commission = round(0.0027 * share_amount, 2)
+            # Find all table rows (tr) within the table body (tbody)
+            table_rows = table.select('tbody tr')
 
-    dp_charge = 25
-    total_paying_amount = round(share_amount + sebon_fee + broker_commission + dp_charge, 2)
-    cost_per_share = round(total_paying_amount / units, 2)
-    price_per_share = round(buying_price + (broker_commission / units), 2)
-    total_charges = round(sebon_fee + broker_commission + dp_charge, 2)
+            # Initialize an empty list to store the data for this page
+            data_list = []
 
+            # Iterate through the table rows and extract data for each row
+            for row in table_rows:
+                row_data = row.find_all('td')
+                if len(row_data) == 4:  # Check if the row has four columns
+                    data = {
+                        "Title": row_data[0].get_text(strip=True),
+                        "Date": row_data[1].get_text(strip=True),
+                        "English": row_data[2].find('a').get('href', '') if row_data[2].find('a') else '',
+                        "Nepali": row_data[3].find('a').get('href', '') if row_data[3].find('a') else ''
+                    }
+                    data_list.append(data)
 
-    response_dict = [{
-        'Share Amount': share_amount,
-        'Sebon Fee': sebon_fee,
-        'Broker Commission': broker_commission,
-        'DP Charge': dp_charge,
-        'Price Per Share': price_per_share,
-        'Total Charges': total_charges,
-        'Payable Amount': total_paying_amount
-    }]
+            combined_data.extend(data_list)
+        else:
+            print(f"Failed to retrieve page {page_number}. Status code:", response.status_code)
 
-    return jsonify(response_dict)
+    return combined_data
+
+@app.route('/get_prospectus/<page_numbers>', methods=['GET'])
+def get_prospectus(page_numbers):
+    # Split the comma-separated page numbers into a list
+    page_numbers = [int(page) for page in page_numbers.split(',')]
+
+    # Fetch data for the specified page numbers
+    data = scrape_sebon_data(page_numbers)
+
+    # Convert the data to JSON
+    json_data = json.dumps(data, indent=4)
+
+    return jsonify(json_data)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
