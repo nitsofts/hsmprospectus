@@ -1,1 +1,1 @@
-web: gunicorn hsmcalculator:app
+web: gunicorn hsmprospectus:app
