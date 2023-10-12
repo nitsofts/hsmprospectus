@@ -55,7 +55,7 @@ def get_prospectus(page_numbers):
     data = scrape_sebon_data(page_numbers)
 
     # Convert the data to JSON
-    json_data = json.dumps(data, indent=4)
+    json_data = json.dumps(data, indent=None)
 
     return jsonify(json_data)
 
