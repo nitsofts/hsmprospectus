@@ -53,8 +53,7 @@ def scrape_sebon_data(page_numbers):
 def get_prospectus(page_numbers):
     page_numbers = [int(page) for page in page_numbers.split(',')]
     data = scrape_sebon_data(page_numbers)
-    json_data = json.dumps(data, indent=None)
-    return jsonify(json_data)
+    return jsonify(data)  # Directly return the data without converting it to string
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
