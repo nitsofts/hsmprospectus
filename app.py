@@ -5,38 +5,41 @@ import json
 
 app = Flask(__name__)
 
+def get_file_size(url):
+    try:
+        response = requests.head(url)
+        file_size_bytes = int(response.headers.get('content-length', 0))
+        file_size_mb = round(file_size_bytes / (1024 * 1024), 2)  # Convert bytes to MB
+        return file_size_mb
+    except Exception:
+        return "N/A"  # Return "N/A" if size can't be calculated
+
 def scrape_sebon_data(page_numbers):
     combined_data = []
 
     for page_number in page_numbers:
-        # Define the URL for the given page
         url = f"https://www.sebon.gov.np/prospectus?page={page_number}"
-
-        # Send a GET request to the URL
         response = requests.get(url)
 
         if response.status_code == 200:
-            # Parse the HTML content
             soup = BeautifulSoup(response.content, 'html.parser')
-
-            # Find the table containing the prospectus data
             table = soup.find('table', class_='table')
-
-            # Find all table rows (tr) within the table body (tbody)
             table_rows = table.select('tbody tr')
-
-            # Initialize an empty list to store the data for this page
             data_list = []
 
-            # Iterate through the table rows and extract data for each row
             for row in table_rows:
                 row_data = row.find_all('td')
-                if len(row_data) == 4:  # Check if the row has four columns
+                if len(row_data) == 4:
+                    # Determine which URL to use for file size calculation
+                    file_url = row_data[3].find('a').get('href', '') if row_data[3].find('a') else row_data[2].find('a').get('href', '')
+                    file_size = get_file_size(file_url) if file_url else "N/A"
+
                     data = {
-                        "Title": row_data[0].get_text(strip=True),
-                        "Date": row_data[1].get_text(strip=True),
-                        "English": row_data[2].find('a').get('href', '') if row_data[2].find('a') else '',
-                        "Nepali": row_data[3].find('a').get('href', '') if row_data[3].find('a') else ''
+                        "title": row_data[0].get_text(strip=True),
+                        "date": row_data[1].get_text(strip=True),
+                        "english": row_data[2].find('a').get('href', '') if row_data[2].find('a') else '',
+                        "nepali": row_data[3].find('a').get('href', '') if row_data[3].find('a') else '',
+                        "fileSize": file_size
                     }
                     data_list.append(data)
 
@@ -48,15 +51,9 @@ def scrape_sebon_data(page_numbers):
 
 @app.route('/get_prospectus/<page_numbers>', methods=['GET'])
 def get_prospectus(page_numbers):
-    # Split the comma-separated page numbers into a list
     page_numbers = [int(page) for page in page_numbers.split(',')]
-
-    # Fetch data for the specified page numbers
     data = scrape_sebon_data(page_numbers)
-
-    # Convert the data to JSON
     json_data = json.dumps(data, indent=None)
-
     return jsonify(json_data)
 
 if __name__ == '__main__':
